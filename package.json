@@ -1,0 +1,97 @@
+{
+  "name": "mfrapiserver",
+  "version": "0.0.1",
+  "private": true,
+  "description": "New Swagger API Project",
+  "keywords": [],
+  "author": "",
+  "license": "",
+  "main": "app.js",
+  "dependencies": {
+    "@google-cloud/local-auth": "^2.1.0",
+    "aws-sdk": "^2.597.0",
+    "cors": "^2.8.5",
+    "es6-template-strings": "^2.0.1",
+    "eslint": "^4.19.1",
+    "express": "^4.16.4",
+    "fs": "0.0.1-security",
+    "googleapis": "^105.0.0",
+    "jsonwebtoken": "^8.4.0",
+    "lodash": "^4.17.11",
+    "moment": "^2.29.3",
+    "mongodb": "^3.6.6",
+    "mongoose": "^5.12.7",
+    "node-cron": "^3.0.0",
+    "node-fetch": "^2.6.0",
+    "npm": "^6.4.1",
+    "recursive-diff": "^1.0.8",
+    "socket.io": "^2.1.1",
+    "sticky-session": "^1.1.2",
+    "swagger": "^0.7.5",
+    "swagger-express-mw": "^0.7.0",
+    "twilio": "^3.43.1",
+    "yaml": "^2.3.1"
+  },
+  "_moduleAliases": {
+    "@lib": "api"
+  },
+  "devDependencies": {
+    "btoa": "^1.2.1",
+    "chai": "^3.5.0",
+    "dotenv": "^1.2.0",
+    "fetch": "^1.1.0",
+    "mocha": "^5.2.0",
+    "nodemon": "^2.0.7",
+    "request": "^2.58.0",
+    "should": "^7.1.0",
+    "socket.io-client": "^2.1.1",
+    "supertest": "^3.3.0",
+    "unicode-passgen": "^1.0.0",
+    "z-schema": "^3.12.0"
+  },
+  "scripts": {
+    "start": "node app.js",
+    "swaggerEdit": "swagger project edit",
+    "swaggerEditor": "./node_modules/.bin/swagger project start",
+    "testSwagger": "swagger project test",
+    "tests": "mocha \"./test/**/*.test.js\" `cat test/api/testsReady`",
+    "testProjects": "mocha \"./test/**/projects.test.js\"",
+    "test_api": "mocha \"./test/api.test.js\"",
+    "test_local": "mocha \"./test/**/*_test.js\" --watch",
+    "test_online": "mocha \"./test/**/*_test.js\" --watch --dburl development_db_url",
+    "testsReady": "mocha `cat test/api/testsReady`",
+    "checkAccess": "mocha \"./test/api/checkAccess.js\""
+  },
+  "prettier": {
+    "printWidth": 200,
+    "quotes": true
+  },
+  "eslintConfig": {
+    "env": {
+      "browser": false,
+      "node": true,
+      "es6": true
+    },
+    "globals": {
+      "_": true
+    },
+    "parserOptions": {
+      "ecmaVersion": 2018
+    },
+    "extends": "eslint:recommended",
+    "rules": {
+      "semi": [
+        2,
+        "always"
+      ],
+      "curly": "error",
+      "no-unused-vars": [
+        "error",
+        {
+          "argsIgnorePattern": "^_"
+        }
+      ],
+      "no-console": 0
+    }
+  }
+}

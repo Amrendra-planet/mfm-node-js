@@ -1,0 +1,175 @@
+#!/bin/bash
+# The above line should make this executable by bash anywhere. PCs can execute bash scrips using the WSl addon:
+# https://docs.microsoft.com/en-us/windows/wsl/install-win10
+# Mac and Linux run bash anyway.
+
+# This is a copy of the `deployBranchToServer` script from clientServer, adapted to deploy _only_ to the alpha mfrApiServer
+# Use it with 
+# ./deployBranchToServer <branch> alpha
+#
+# A new branch newBranch will be made from <branch>. Then `develop` will be merged into newBranch.
+# Then newBranch will completely replace the code currently at the `feature/sprints` branch.
+# That should deploy it to mfrAlpha mfrApiServer automatically.
+
+# This trap code from https://intoli.com/blog/exit-on-errors-in-bash-scripts/
+# exit when any command fails
+set -e
+
+# keep track of the last executed command
+trap 'last_command=$current_command; current_command=$BASH_COMMAND; last_line=${LINENO}' DEBUG
+
+# define a function to run to clean up on 
+function cleanupOnError {
+  originalError=$?
+  >&2 echo "The command \"${last_command}\" failed on line ${last_line} with exit code $originalError."
+  if [[ -n $mergingDevelop ]] # if mergingDevelop is a nonempty string
+  then
+    >&2 echo "There are merge conflicts after merging with the develop branch. These have to be fixed before deployment can go ahead."
+    >&2 echo "The developer has to fix these by merging develop into their code and fixing the merge conflicts."
+    git merge --abort # Have to do this or we cannot checkout the original branch or delete the temproary branch
+  fi
+  if [ ! -z "$originalBranch" ]
+  then
+    # checkout the original branch on error because
+    # a) it's very confusing to end up in the wrong branch and
+    # b) if someone types in the wrong branch name then that will error too
+    # This will not recurse indefinitely if the original branch cannot be checked out.
+    git checkout "$originalBranch"
+  fi
+  if [ ! -z "$temporaryBranch" ]
+  then
+    # if we have created a new temporary branch then _definitely_ delete it.
+    git branch -D "$temporaryBranch"
+  fi
+  exit $originalError
+}
+
+# Run a cleanup routine before exiting
+trap cleanupOnError EXIT
+
+
+# Shell script to deploy any MFR mfrApiServer branch to ONLY the alpha AWS server for testing.
+# AWS automatically deploys commits to the `$target` branch onto the a server.
+
+# The branch names for the servers are a bit odd:
+# -----------------------
+# Server  Branch
+# ======= ===============
+# alpha   feature/sprints
+# beta    develop
+# mfm     main
+# -----------------------
+# These branches are _only_ used for deploying to the servers.
+
+# That takes a few minutes.
+# The code in the new branch being developed should entirely replace the code in
+# `$target`. The new branch should itself be complete.
+
+# This technique for replacing code in a branch is taken from 
+# https://stackoverflow.com/questions/2862590/how-to-replace-master-branch-in-git-entirely-from-another-branch/2862938#2862938
+
+# Make sure there are precisely two command line parameters
+if [ $# -ne 2 ]
+then
+  >&2 echo usage: $0 branch_to_deploy server
+  >&2 echo server must be one of alpha, alpha1, alpha2, qa
+  exit 1
+fi
+branch=$1
+server=$2
+
+trim() { # https://stackoverflow.com/a/3352015/1134551
+    local var="$*"
+    # remove leading whitespace characters
+    var="${var#"${var%%[![:space:]]*}"}"
+    # remove trailing whitespace characters
+    var="${var%"${var##*[![:space:]]}"}"   
+    printf '%s' "$var"
+    if [ -z "$var" ]
+    then
+      >&2 echo "Parameters cannot be blank. Quitting." # https://stackoverflow.com/a/23550347/1134551
+      exit 14
+    fi
+}
+
+# strip leading and trailing whitespace
+branch=$( trim $branch )
+server=$( trim $server )
+# We now have a nonblank branch and server.
+# Transform the server into a deployment branch
+# `target` is the deployment branch we have to update
+case "$server" in
+"alpha")
+  target=feature/sprints
+  ;;
+*)
+  >&2 echo Sorry I cannot deploy to server \""$server"\"
+  >&2 echo server must be one of alpha, alpha1, alpha2, qa
+  exit 15
+  ;;
+esac
+# check that to make sure
+if [ -z "$target" ] ; then exit 16 ; fi
+
+# If the current branch has uncommitted files complain and stop.
+modified=$( git status | grep "modified:" | wc -l )
+if [ $modified -gt 0 ]
+then
+  >&2 echo There are files not committed. Commit them and try again.
+  exit 3
+fi
+
+# Make a note of the original branch. We want to restore this branch if we exit on error.
+originalBranch=$( git branch --show-current )
+
+# Make sure our local copy of $target is up to date
+git fetch # maybe this machine has never heard of this branch. I hope this fixes that.
+git checkout $target
+git pull
+
+# Make sure we have the branch we are trying to deploy. This works ok if it is already present.
+git checkout $branch
+git pull # make sure that we have any updates from the remote.
+
+# I do not actually want to deploy $branch to the server, because deployment modifies
+# $branch with a very confusing merge operation.
+# So I create a new branch from $branch and tag it with the commit ID to try to make it a useful branch name
+# from https://stackoverflow.com/a/5694416/1134551
+temporaryBranch=$branch-$( git rev-parse --short HEAD )
+echo Created temporaryBranch:$temporaryBranch
+
+# The next line should create and switch to a new unique branch that is identical to $branch.
+git checkout -b $temporaryBranch
+
+# Deployed code is supposed to up-to-date with the `develop` branch.
+# Developers have had problems when they have not been aware that `develop` has updated.
+# So here we merge the current remote `develop` branch into the $temporaryBranch.
+# If there are merge conflicts the developer should stop and fix them.
+# If this happens in QA then QA should reject the branch for rework.
+mergingDevelop=true # signal that we are doing the merge so the error is handled differently
+git merge --no-ff -m "Automatic merge of develop into $temporaryBranch" -m "This will only proceed if the merge has no conflicts" origin/develop
+mergingDevelop="" # merge worked ok here.
+
+# This pretends to merge $target into $branch but actually ignores $target.
+# The result is entirely determined by $branch.
+git merge --strategy=ours -m "Prepare to replace the contents of $target" -m "With merge --strategy=ours $target" $target
+
+# Now checkout the $target branch and merge our new code into it.
+git checkout $target
+git merge --no-ff -m "Merging $temporaryBranch into $target for deployment to $server" $temporaryBranch
+# This next push causes AWS to redeploy the target branch to the target server
+git push
+# Switch back to $branch, probably want to edit it.
+git checkout $branch
+
+# NO! Do not do the below because we do not want deployment to modify $branch.
+# Merge yet again because otherwise comparing branches $branch appears to be one commit behind $target.
+# git merge $target
+# update the origin
+# git push
+
+# delete the local temporary branch
+git branch -D "$temporaryBranch"
+
+ # exit with a nice message
+trap 'echo Success!' EXIT

@@ -1,0 +1,17 @@
+image: node:8.9.4
+
+before_script:
+ - npm install
+
+cache:
+  paths:
+    - node_modules/
+
+deploy-featuresprint:
+ tags:
+    - mfrapi
+
+ only:
+ - develop
+ script:
+  - sudo systemctl restart mfr
